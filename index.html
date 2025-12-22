@@ -13,7 +13,7 @@
             margin: 0;
             overflow: hidden;
             background-color: #020205; 
-            font-family: 'Cinzel', serif; /* Updated Font */
+            font-family: 'Cinzel', serif;
             user-select: none; 
             -webkit-user-select: none;
             touch-action: none; 
@@ -21,21 +21,39 @@
         canvas {
             display: block;
         }
+        /* UI Container for easy hiding */
+        .ui-layer {
+            transition: opacity 0.5s ease-in-out;
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .ui-layer.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
         #instructions {
             position: absolute;
             top: 20px;
-            width: 100%;
+            width: 80%;
+            left: 10%;
             text-align: center;
-            color: rgba(255, 255, 255, 0.6);
-            pointer-events: none;
+            color: rgba(255, 255, 255, 0.8);
             text-transform: uppercase;
-            letter-spacing: 3px; /* Increased spacing for cinematic look */
+            letter-spacing: 3px;
             font-size: 0.9rem;
-            transition: opacity 1s;
             text-shadow: 0 0 10px rgba(255,255,255,0.5);
             z-index: 5;
             font-weight: 700;
+            cursor: text; 
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.3s;
         }
+        #instructions:hover, #instructions:focus {
+            border-bottom: 1px solid rgba(255,255,255,0.3);
+            outline: none;
+        }
+
         #footer {
             position: absolute;
             bottom: 20px;
@@ -53,7 +71,7 @@
             bottom: 20px;
             right: 20px;
             color: rgba(255, 255, 255, 0.8);
-            font-family: 'Courier New', monospace; /* Keep timer monospaced */
+            font-family: 'Courier New', monospace;
             font-size: 0.9rem;
             pointer-events: none;
             text-shadow: 0 0 5px rgba(255,255,255,0.5);
@@ -94,48 +112,48 @@
             color: white;
             border-color: white;
         }
+        .control-btn.active {
+            background: rgba(255, 255, 255, 0.4);
+            color: white;
+            border-color: white;
+            box-shadow: 0 0 10px rgba(255,255,255,0.3);
+        }
+
         #theme-btn { top: 50px; }
         #music-btn { top: 90px; }
+        #blizzard-btn { top: 130px; }
 
         @media (max-width: 600px) {
-            #theme-btn {
-                top: 60px; 
-                right: 10px;
-                font-size: 0.6rem;
-                padding: 6px 12px;
-                min-width: 60px;
+            #instructions {
+                top: 20px;
+                font-size: 0.8rem;
             }
-            #music-btn {
-                top: 95px;
-                right: 10px;
-                font-size: 0.6rem;
-                padding: 6px 12px;
-                min-width: 60px;
-            }
-            #countdown {
-                right: 10px;
-                bottom: 10px;
-            }
-            #footer {
-                left: 10px;
-                bottom: 10px;
-            }
+            #theme-btn { top: 60px; right: 10px; font-size: 0.6rem; padding: 6px 12px; min-width: 60px; }
+            #music-btn { top: 95px; right: 10px; font-size: 0.6rem; padding: 6px 12px; min-width: 60px; }
+            #blizzard-btn { top: 130px; right: 10px; font-size: 0.6rem; padding: 6px 12px; min-width: 60px; }
+            #countdown { right: 10px; bottom: 10px; }
+            #footer { left: 10px; bottom: 10px; }
         }
     </style>
 </head>
 <body>
 
-    <div id="instructions">Tap sky for fireworks, ground for sparks!</div>
-    
-    <div id="theme-btn" class="control-btn">Theme: Classic</div>
-    <div id="music-btn" class="control-btn">Music: Off</div>
-    
-    <div id="countdown">
-        <label>Time to Christmas</label>
-        <span id="timer-val">--:--:--:--</span>
+    <!-- Wrap UI elements for easy hiding -->
+    <div id="ui-layer" class="ui-layer">
+        <div id="instructions" contenteditable="true">Magic is in the air...</div>
+        
+        <div id="theme-btn" class="control-btn">Theme: Classic</div>
+        <div id="music-btn" class="control-btn">Music: Off</div>
+        <div id="blizzard-btn" class="control-btn">Blizzard: Off</div>
+        
+        <div id="countdown">
+            <label>Time to Christmas</label>
+            <span id="timer-val">--:--:--:--</span>
+        </div>
+
+        <div id="footer">&copy; 2025 Designed by SEVEN.FOUR</div>
     </div>
 
-    <div id="footer">&copy; 2025 Designed by SEVEN.FOUR</div>
     <canvas id="canvas"></canvas>
 
     <script>
@@ -144,11 +162,14 @@
         const instructions = document.getElementById('instructions');
         const themeBtn = document.getElementById('theme-btn');
         const musicBtn = document.getElementById('music-btn');
+        const blizzardBtn = document.getElementById('blizzard-btn');
         const timerVal = document.getElementById('timer-val');
+        const uiLayer = document.getElementById('ui-layer');
 
         let width, height;
         let particles = [];
         let snowParticles = [];
+        let fireflies = [];
         let shootingStars = [];
         let sparklers = [];
         let fireworks = []; 
@@ -160,10 +181,13 @@
         let autoRotate = 0;
         let wind = 0;
         let targetWind = 0;
+        let isBlizzard = false;
+        let userHasEditedText = false;
 
         let time = 0; 
         
         let treeState = 'assembling'; 
+        let lastTreeState = '';
         let stateTimer = 0;
         const HOLD_DURATION = 480; 
 
@@ -215,9 +239,7 @@
                 {n: 'E4', d: 0.25}, {n: 'D4', d: 0.25}, {n: 'D4', d: 0.25}, {n: 'E4', d: 0.25},
                 {n: 'D4', d: 0.5}, {n: 'G4', d: 0.5}
             ],
-            freqs: {
-                'C4': 261.63, 'D4': 293.66, 'E4': 329.63, 'F4': 349.23, 'G4': 392.00
-            },
+            freqs: { 'C4': 261.63, 'D4': 293.66, 'E4': 329.63, 'F4': 349.23, 'G4': 392.00 },
             init: function() {
                 if (!this.ctx) {
                     this.ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -227,21 +249,16 @@
                 if(!this.ctx) return;
                 const osc = this.ctx.createOscillator();
                 const gain = this.ctx.createGain();
-                
                 osc.type = 'triangle';
                 osc.frequency.value = freq;
-                
                 osc.connect(gain);
                 gain.connect(this.ctx.destination);
-                
                 const now = this.ctx.currentTime;
                 gain.gain.setValueAtTime(0, now);
                 gain.gain.linearRampToValueAtTime(0.1, now + 0.05); 
                 gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
-                
                 osc.start(now);
                 osc.stop(now + duration + 0.1);
-
                 beatIntensity = 1.0; 
             },
             loop: function() {
@@ -250,18 +267,13 @@
                 const freq = this.freqs[note.n];
                 const beatDuration = 600; 
                 const noteDuration = note.d * beatDuration;
-                
                 this.playNote(freq, note.d * 1.5);
-                
                 this.noteIndex = (this.noteIndex + 1) % this.melody.length;
                 this.timer = setTimeout(() => this.loop(), noteDuration);
             },
             toggle: function() {
                 this.init();
-                if (this.ctx.state === 'suspended') {
-                    this.ctx.resume();
-                }
-
+                if (this.ctx.state === 'suspended') this.ctx.resume();
                 this.isPlaying = !this.isPlaying;
                 if (this.isPlaying) {
                     musicBtn.innerText = "Music: On";
@@ -273,17 +285,57 @@
             }
         };
 
-        class StarTopper {
+        // --- CLASSES ---
+
+        class Firefly {
             constructor() {
-                this.reset();
+                this.reset(true); // Random initial position
             }
+            reset(randomStart = false) {
+                this.x = Math.random() * width;
+                // If starting, anywhere bottom. Else, strictly below screen to rise up.
+                this.y = randomStart ? height - Math.random() * 250 : height + Math.random() * 50;
+                
+                this.angle = Math.random() * Math.PI * 2;
+                this.speed = 0.3 + Math.random() * 0.4; 
+                this.cycle = Math.random() * Math.PI * 2;
+                this.wobble = Math.random() * 0.05;
+            }
+            update() {
+                this.y -= this.speed; // Always rise upwards
+                this.x += Math.cos(this.angle) * 0.5; // Gentle wander
+                this.angle += this.wobble;
+                this.cycle += 0.05; // Pulse speed
+
+                // If goes too high (above tree base area), reset to bottom
+                if(this.y < height - 300) { 
+                    this.reset();
+                }
+                
+                // Wrap horizontal
+                if(this.x < -50) this.x = width + 50;
+                if(this.x > width + 50) this.x = -50;
+            }
+            draw(ctx) {
+                const alpha = 0.2 + 0.6 * Math.sin(this.cycle);
+                ctx.globalAlpha = Math.max(0, alpha);
+                ctx.fillStyle = '#ffeb3b'; // Gold
+                // Soft glow for fireflies
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = '#ffeb3b';
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, 2, 0, Math.PI*2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        class StarTopper {
+            constructor() { this.reset(); }
             reset() {
-                this.x = 0;
-                this.y = TREE_HEIGHT / 2;
-                this.z = 0;
-                this.size = 12; 
-                this.opacity = 0;
-                this.color = '#fffbe3'; 
+                this.x = 0; this.y = TREE_HEIGHT / 2; this.z = 0;
+                this.size = 12; this.opacity = 0; this.color = '#fffbe3'; 
                 this.twinkleOffset = Math.random() * 100;
             }
             update() {
@@ -295,20 +347,15 @@
             }
             draw(ctx, centerX, centerY, globalRotation) {
                 if (this.opacity <= 0.01) return;
-
-                // Make pulse softer (0.15 instead of 0.3)
                 const beatScale = 1 + beatIntensity * 0.15;
                 const scale = (FOCAL_LENGTH / (FOCAL_LENGTH + 0)) * treeScale * beatScale;
-                
                 const x2d = centerX; 
                 const y2d = centerY - this.y * scale / beatScale; 
-
                 const twinkle = 0.8 + 0.4 * Math.sin(time * 0.15 + this.twinkleOffset);
                 
                 ctx.globalAlpha = this.opacity;
                 ctx.fillStyle = this.color;
                 
-                // Draw Star Shape
                 const spikes = 5;
                 const outerRadius = this.size * scale * twinkle;
                 const innerRadius = outerRadius / 2;
@@ -323,29 +370,23 @@
                     ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
                 }
                 ctx.closePath();
-                
                 ctx.shadowBlur = 40 * scale;
                 ctx.shadowColor = "rgba(255, 255, 200, 0.9)";
                 ctx.fill();
-                
                 ctx.fillStyle = '#ffffff';
                 ctx.shadowBlur = 10 * scale;
                 ctx.fill();
-
                 ctx.restore();
                 ctx.globalAlpha = 1;
             }
         }
 
         class Firework {
-            constructor(x, y, isClick = false) {
-                this.reset(x, y, isClick);
-            }
+            constructor(x, y, isClick = false) { this.reset(x, y, isClick); }
             reset(startX, startY, isClick) {
                 this.particles = [];
                 const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#ffffff'];
                 this.color = colors[Math.floor(Math.random() * colors.length)];
-                
                 if (isClick) {
                     this.state = 'exploding';
                     this.explode(startX, startY);
@@ -372,9 +413,7 @@
                 } else if (this.state === 'exploding') {
                     let aliveCount = 0;
                     this.particles.forEach(p => {
-                        p.x += p.vx;
-                        p.y += p.vy;
-                        p.vy += 0.05; 
+                        p.x += p.vx; p.y += p.vy; p.vy += 0.05; 
                         p.life -= 0.02;
                         if(p.life > 0) aliveCount++;
                     });
@@ -387,12 +426,10 @@
                     const angle = Math.random() * Math.PI * 2;
                     const speed = Math.random() * 3 + 1;
                     this.particles.push({
-                        x: x,
-                        y: y,
+                        x: x, y: y,
                         vx: Math.cos(angle) * speed,
                         vy: Math.sin(angle) * speed,
-                        life: 1.0,
-                        color: this.color
+                        life: 1.0, color: this.color
                     });
                 }
             }
@@ -415,8 +452,7 @@
 
         class Sparkler {
             constructor(x, y) {
-                this.x = x;
-                this.y = y;
+                this.x = x; this.y = y;
                 const angle = Math.random() * Math.PI * 2;
                 const speed = Math.random() * 5 + 2;
                 this.vx = Math.cos(angle) * speed;
@@ -428,11 +464,9 @@
                 this.gravity = 0.15;
             }
             update() {
-                this.x += this.vx;
-                this.y += this.vy;
+                this.x += this.vx; this.y += this.vy;
                 this.vy += this.gravity;
-                this.vx *= 0.95; 
-                this.vy *= 0.95;
+                this.vx *= 0.95; this.vy *= 0.95;
                 this.life -= this.decay;
             }
             draw(ctx) {
@@ -444,9 +478,7 @@
         }
 
         class ShootingStar {
-            constructor() {
-                this.reset();
-            }
+            constructor() { this.reset(); }
             reset() {
                 this.x = Math.random() * width;
                 this.y = Math.random() * height * 0.4; 
@@ -492,9 +524,7 @@
         }
 
         class SnowParticle {
-            constructor() {
-                this.reset();
-            }
+            constructor() { this.reset(); }
             reset() {
                 this.x = (Math.random() - 0.5) * width;
                 this.y = -height/2 - Math.random() * height; 
@@ -502,14 +532,29 @@
                 this.size = Math.random() * 2 + 0.5;
                 this.speed = Math.random() * 2 + 1;
                 this.drift = Math.random() * Math.PI * 2;
+                this.vx = 0; this.vy = 0;
             }
             update() {
-                this.y += this.speed;
-                this.x += Math.sin(this.drift) * 0.5 + wind;
+                // Better Blizzard Physics
+                let speedMult = isBlizzard ? 4 : 1; 
+                
+                // Vertical speed
+                this.vy = this.speed * speedMult;
+                
+                // Horizontal wind - more intense in blizzard
+                let windForce = isBlizzard ? (wind * 2 + 8 + Math.sin(time * 0.1) * 2) : (wind + Math.sin(this.drift) * 0.5);
+                this.vx = windForce;
+
+                this.y += this.vy;
+                this.x += this.vx;
                 this.drift += 0.02;
+                
                 if (this.y > height/2 + 200) {
                     this.reset();
-                    this.x = (Math.random() - 0.5) * width - (wind * 100);
+                    // Spawn upwind so it fills screen nicely
+                    let spawnOffset = isBlizzard ? -300 : -100;
+                    if (this.vx < 0) spawnOffset = 300; // if wind blowing left
+                    this.x = (Math.random() - 0.5) * width + this.vx * -10; 
                 }
             }
             draw(ctx, centerX, centerY) {
@@ -519,7 +564,19 @@
                 ctx.globalAlpha = 0.6 * scale;
                 ctx.fillStyle = 'white';
                 const s = this.size * scale;
-                ctx.fillRect(x2d, y2d, s, s);
+
+                if (isBlizzard) {
+                    // Draw angled streak based on velocity for authentic storm look
+                    ctx.lineWidth = s * 0.8;
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+                    ctx.beginPath();
+                    ctx.moveTo(x2d, y2d);
+                    // Trail length proportional to speed
+                    ctx.lineTo(x2d - this.vx * scale * 1.5, y2d - this.vy * scale * 1.5);
+                    ctx.stroke();
+                } else {
+                    ctx.fillRect(x2d, y2d, s, s);
+                }
                 ctx.globalAlpha = 1;
             }
         }
@@ -611,14 +668,11 @@
                 }
                 else if (treeState === 'disassembling') {
                     this.state = 'dissipating';
-                    this.y += this.fallSpeed; // Fall down
-                    
-                    // Simple drift
+                    this.y += this.fallSpeed; 
                     this.x += Math.sin(this.drift) * 1.0 + wind; 
                     this.z += Math.cos(this.drift) * 1.0;
                     this.drift += 0.05;
-                    
-                    this.opacity -= 0.015; // Fade out as they fall
+                    this.opacity -= 0.015; 
                     if (this.opacity < 0) this.opacity = 0;
                 }
             }
@@ -635,7 +689,6 @@
                 let rx = targetRx * cos - targetRz * sin;
                 let rz = targetRx * sin + targetRz * cos;
 
-                // VISUALIZER: Scale tree with beat (Softer pulse: 0.02)
                 const beatScale = 1 + beatIntensity * 0.02;
                 const scale = (FOCAL_LENGTH / (FOCAL_LENGTH + rz)) * treeScale * beatScale;
                 
@@ -738,26 +791,47 @@
             particles.forEach(p => p.refreshColor());
         }
 
+        function toggleBlizzard() {
+            isBlizzard = !isBlizzard;
+            blizzardBtn.innerText = isBlizzard ? "Blizzard: ON" : "Blizzard: Off";
+            blizzardBtn.classList.toggle('active');
+        }
+
+        let lastTapTime = 0;
+        function handleDoubleTap() {
+            const now = new Date().getTime();
+            if (now - lastTapTime < 300) {
+                uiLayer.classList.toggle('hidden');
+            }
+            lastTapTime = now;
+        }
+
         function init() {
             resize();
             createParticles();
             createSnow();
             createShootingStars();
+            createFireflies();
             starTopper = new StarTopper(); 
             
             themeBtn.addEventListener('click', toggleTheme);
             themeBtn.addEventListener('touchstart', (e) => {
-                e.preventDefault(); 
-                e.stopPropagation(); 
-                toggleTheme();
+                e.preventDefault(); e.stopPropagation(); toggleTheme();
             }, { passive: false });
 
             musicBtn.addEventListener('click', () => Music.toggle());
             musicBtn.addEventListener('touchstart', (e) => {
-                e.preventDefault(); 
-                e.stopPropagation();
-                Music.toggle();
+                e.preventDefault(); e.stopPropagation(); Music.toggle();
             }, { passive: false });
+
+            blizzardBtn.addEventListener('click', toggleBlizzard);
+            blizzardBtn.addEventListener('touchstart', (e) => {
+                e.preventDefault(); e.stopPropagation(); toggleBlizzard();
+            }, { passive: false });
+
+            instructions.addEventListener('mousedown', (e) => e.stopPropagation());
+            instructions.addEventListener('touchstart', (e) => e.stopPropagation());
+            instructions.addEventListener('input', () => { userHasEditedText = true; });
 
             animate();
         }
@@ -773,6 +847,13 @@
             snowParticles = [];
             for (let i = 0; i < 200; i++) {
                 snowParticles.push(new SnowParticle());
+            }
+        }
+
+        function createFireflies() {
+            fireflies = [];
+            for (let i = 0; i < 30; i++) {
+                fireflies.push(new Firefly());
             }
         }
 
@@ -802,7 +883,6 @@
             updateCountdown();
             
             wind += (targetWind - wind) * 0.05;
-            
             beatIntensity *= 0.9;
 
             ctx.globalCompositeOperation = 'source-over';
@@ -823,7 +903,6 @@
                 star.draw(ctx);
             });
 
-            // Random fireworks during hold (keep them)
             if (treeState === 'assembled' && Math.random() < 0.02) {
                 fireworks.push(new Firework());
             }
@@ -839,15 +918,20 @@
 
             autoRotate += rotationSpeed;
 
+            // State Logic with Text Handling
             stateTimer++;
+            let currentText = instructions.innerText;
+            
             if (treeState === 'assembling') {
-                instructions.innerText = "The magic is rising...";
+                if(!userHasEditedText && lastTreeState !== 'assembling') {
+                    instructions.innerText = "The magic is rising...";
+                }
                 instructions.style.opacity = 1;
                 let formedCount = particles.filter(p => p.state === 'formed').length;
                 if (formedCount > particles.length * 0.95) {
                     treeState = 'assembled';
                     stateTimer = 0;
-                    instructions.innerText = "MERRY CHRISTMAS";
+                    if(!userHasEditedText) instructions.innerText = "MERRY CHRISTMAS";
                 }
             } else if (treeState === 'assembled') {
                 if (stateTimer > HOLD_DURATION) {
@@ -869,6 +953,7 @@
                     });
                 }
             }
+            lastTreeState = treeState;
 
             ctx.globalCompositeOperation = 'lighter'; 
 
@@ -881,26 +966,18 @@
             });
             particles.sort((a, b) => b._depth - a._depth);
 
-            // Reflection
             if (treeState === 'assembling' || treeState === 'assembled' || treeState === 'disassembling') {
                 ctx.save();
                 const floorOffset = 250 * treeScale * (1 + beatIntensity * 0.01); 
                 const floorScreenY = centerY + floorOffset; 
-                
                 ctx.translate(0, floorScreenY); 
                 ctx.scale(1, -0.3); 
                 ctx.translate(0, -floorScreenY);
-                
                 particles.forEach((p, index) => {
-                    // Optimization: Skip 2/3rds of particles in reflection
-                    if (index % 3 === 0) {
-                        // Increased opacity from 0.2 to 0.4 for better visibility
-                        p.draw(ctx, centerX, centerY, autoRotate, 0.4);
-                    }
+                    if (index % 3 === 0) p.draw(ctx, centerX, centerY, autoRotate, 0.4);
                 });
-                
-                // Removed Star Topper reflection as requested
-
+                starTopper.update();
+                starTopper.draw(ctx, centerX, centerY, autoRotate);
                 ctx.restore();
             }
 
@@ -909,8 +986,6 @@
                 p.draw(ctx, centerX, centerY, autoRotate);
             });
             
-            // Update star here since we removed it from reflection
-            starTopper.update();
             starTopper.draw(ctx, centerX, centerY, autoRotate);
 
             ctx.globalCompositeOperation = 'source-over'; 
@@ -919,14 +994,18 @@
                 p.draw(ctx, centerX, centerY);
             });
 
+            // Fireflies (New)
             ctx.globalCompositeOperation = 'lighter';
+            fireflies.forEach(f => {
+                f.update();
+                f.draw(ctx);
+            });
+
             for (let i = sparklers.length - 1; i >= 0; i--) {
                 const s = sparklers[i];
                 s.update();
                 s.draw(ctx);
-                if (s.life <= 0) {
-                    sparklers.splice(i, 1);
-                }
+                if (s.life <= 0) sparklers.splice(i, 1);
             }
 
             requestAnimationFrame(animate);
@@ -955,9 +1034,21 @@
             }
         }
 
+        window.addEventListener('dblclick', () => {
+            uiLayer.classList.toggle('hidden');
+        });
+        window.addEventListener('touchstart', (e) => {
+            if (e.target.id === 'theme-btn' || e.target.id === 'music-btn' || e.target.id === 'blizzard-btn') return;
+            handleDoubleTap();
+            if (e.touches.length > 0) {
+                handleTapOrClick(e.touches[0].clientX, e.touches[0].clientY);
+                handleInput(e.touches[0].clientX); 
+            }
+        }, { passive: false });
+
         window.addEventListener('mousemove', (e) => handleInput(e.clientX));
         window.addEventListener('mousedown', (e) => {
-            if (e.target.id === 'theme-btn' || e.target.id === 'music-btn') return;
+            if (e.target.closest('.control-btn') || e.target.id === 'instructions') return;
             handleTapOrClick(e.clientX, e.clientY);
         });
 
@@ -966,14 +1057,6 @@
                 handleInput(e.touches[0].clientX);
             }
         }, { passive: true });
-
-        window.addEventListener('touchstart', (e) => {
-            if (e.target.id === 'theme-btn' || e.target.id === 'music-btn') return;
-            if (e.touches.length > 0) {
-                handleTapOrClick(e.touches[0].clientX, e.touches[0].clientY);
-                handleInput(e.touches[0].clientX); 
-            }
-        }, { passive: false });
 
         window.addEventListener('deviceorientation', (e) => {
             if (e.gamma !== null) {
