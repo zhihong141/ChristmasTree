@@ -308,6 +308,7 @@
                 ctx.globalAlpha = this.opacity;
                 ctx.fillStyle = this.color;
                 
+                // Draw Star Shape
                 const spikes = 5;
                 const outerRadius = this.size * scale * twinkle;
                 const innerRadius = outerRadius / 2;
@@ -880,9 +881,9 @@
             });
             particles.sort((a, b) => b._depth - a._depth);
 
+            // Reflection
             if (treeState === 'assembling' || treeState === 'assembled' || treeState === 'disassembling') {
                 ctx.save();
-                // Apply beat to reflection position slightly too
                 const floorOffset = 250 * treeScale * (1 + beatIntensity * 0.01); 
                 const floorScreenY = centerY + floorOffset; 
                 
@@ -891,13 +892,14 @@
                 ctx.translate(0, -floorScreenY);
                 
                 particles.forEach((p, index) => {
+                    // Optimization: Skip 2/3rds of particles in reflection
                     if (index % 3 === 0) {
-                        p.draw(ctx, centerX, centerY, autoRotate, 0.2);
+                        // Increased opacity from 0.2 to 0.4 for better visibility
+                        p.draw(ctx, centerX, centerY, autoRotate, 0.4);
                     }
                 });
                 
-                starTopper.update();
-                starTopper.draw(ctx, centerX, centerY, autoRotate);
+                // Removed Star Topper reflection as requested
 
                 ctx.restore();
             }
@@ -907,6 +909,8 @@
                 p.draw(ctx, centerX, centerY, autoRotate);
             });
             
+            // Update star here since we removed it from reflection
+            starTopper.update();
             starTopper.draw(ctx, centerX, centerY, autoRotate);
 
             ctx.globalCompositeOperation = 'source-over'; 
