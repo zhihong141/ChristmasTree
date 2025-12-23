@@ -8,6 +8,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&display=swap" rel="stylesheet">
+    <!-- Import gif.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
     <style>
         body {
             margin: 0;
@@ -118,10 +120,23 @@
             border-color: white;
             box-shadow: 0 0 10px rgba(255,255,255,0.3);
         }
+        .control-btn.processing {
+            background: rgba(255, 215, 0, 0.3);
+            border-color: #ffd700;
+            color: #fff;
+            cursor: wait;
+            animation: pulse-yellow 1s infinite;
+        }
+        @keyframes pulse-yellow {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
 
         #theme-btn { top: 50px; }
         #music-btn { top: 90px; }
         #blizzard-btn { top: 130px; }
+        #gif-btn { top: 170px; }
 
         @media (max-width: 600px) {
             #instructions {
@@ -131,6 +146,7 @@
             #theme-btn { top: 60px; right: 10px; font-size: 0.6rem; padding: 6px 12px; min-width: 60px; }
             #music-btn { top: 95px; right: 10px; font-size: 0.6rem; padding: 6px 12px; min-width: 60px; }
             #blizzard-btn { top: 130px; right: 10px; font-size: 0.6rem; padding: 6px 12px; min-width: 60px; }
+            #gif-btn { top: 165px; right: 10px; font-size: 0.6rem; padding: 6px 12px; min-width: 60px; }
             #countdown { right: 10px; bottom: 10px; }
             #footer { left: 10px; bottom: 10px; }
         }
@@ -145,6 +161,7 @@
         <div id="theme-btn" class="control-btn">Theme: Classic</div>
         <div id="music-btn" class="control-btn">Music: Off</div>
         <div id="blizzard-btn" class="control-btn">Blizzard: Off</div>
+        <div id="gif-btn" class="control-btn">Save GIF</div>
         
         <div id="countdown">
             <label>Time to Christmas</label>
@@ -163,6 +180,7 @@
         const themeBtn = document.getElementById('theme-btn');
         const musicBtn = document.getElementById('music-btn');
         const blizzardBtn = document.getElementById('blizzard-btn');
+        const gifBtn = document.getElementById('gif-btn');
         const timerVal = document.getElementById('timer-val');
         const uiLayer = document.getElementById('ui-layer');
 
@@ -189,7 +207,7 @@
         let treeState = 'assembling'; 
         let lastTreeState = '';
         let stateTimer = 0;
-        const HOLD_DURATION = 480; 
+        let holdDuration = 480; 
 
         const PARTICLE_COUNT = 1200; 
         const GIFT_PARTICLE_COUNT = 200; 
@@ -221,6 +239,87 @@
             }
         ];
         let currentThemeIndex = 0;
+
+        // --- GIF SYSTEM (OPTIMIZED LOW RES) ---
+        let gif = null;
+        let isRecordingGIF = false;
+        let gifWorkerBlobURL = null;
+        let gifCanvas = document.createElement('canvas'); 
+        let gifCtx = gifCanvas.getContext('2d');
+        const GIF_WIDTH = 200;  // Low resolution for speed & success
+        const GIF_HEIGHT = 355; 
+
+        // Preload GIF worker code
+        fetch('https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js')
+            .then(r => r.text())
+            .then(code => {
+                const blob = new Blob([code], {type: 'application/javascript'});
+                gifWorkerBlobURL = URL.createObjectURL(blob);
+            })
+            .catch(e => console.log("Worker load error:", e));
+
+        function startGIFRecording() {
+            if (!gifWorkerBlobURL || isRecordingGIF) return;
+
+            isRecordingGIF = true;
+            gifBtn.innerText = "Rec...";
+            gifBtn.classList.add('processing');
+            
+            // Shorten hold duration for GIF to make it concise (2.5 seconds)
+            holdDuration = 150; 
+
+            // Initialize GIF encoder
+            gif = new GIF({
+                workers: 2,
+                quality: 30, // Lower quality for speed
+                workerScript: gifWorkerBlobURL,
+                width: GIF_WIDTH, 
+                height: GIF_HEIGHT
+            });
+            gifCanvas.width = GIF_WIDTH;
+            gifCanvas.height = GIF_HEIGHT;
+
+            // Reset animation to start
+            treeState = 'disassembling';
+            stateTimer = 0;
+            
+            // Force reset particles immediately off screen
+            particles.forEach(p => {
+                p.resetProperties(); 
+                p.y = height + 300;
+                p.state = 'idle';
+            });
+            
+            // Wait a moment then start assembly
+            setTimeout(() => {
+                treeState = 'assembling';
+                stateTimer = 0;
+            }, 100);
+        }
+
+        function finishGIFRecording() {
+            isRecordingGIF = false;
+            gifBtn.innerText = "Encoding...";
+            
+            gif.on('finished', function(blob) {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = `Christmas_Loop_LowRes_${new Date().getTime()}.gif`;
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                    gifBtn.innerText = "Save GIF";
+                    gifBtn.classList.remove('processing');
+                    holdDuration = 480; // Restore original duration
+                }, 100);
+            });
+
+            gif.render();
+        }
 
         // --- MUSIC SYSTEM ---
         const Music = {
@@ -289,38 +388,31 @@
 
         class Firefly {
             constructor() {
-                this.reset(true); // Random initial position
+                this.reset(true); 
             }
             reset(randomStart = false) {
                 this.x = Math.random() * width;
-                // If starting, anywhere bottom. Else, strictly below screen to rise up.
                 this.y = randomStart ? height - Math.random() * 250 : height + Math.random() * 50;
-                
                 this.angle = Math.random() * Math.PI * 2;
                 this.speed = 0.3 + Math.random() * 0.4; 
                 this.cycle = Math.random() * Math.PI * 2;
                 this.wobble = Math.random() * 0.05;
             }
             update() {
-                this.y -= this.speed; // Always rise upwards
-                this.x += Math.cos(this.angle) * 0.5; // Gentle wander
+                this.y -= this.speed; 
+                this.x += Math.cos(this.angle) * 0.5; 
                 this.angle += this.wobble;
-                this.cycle += 0.05; // Pulse speed
-
-                // If goes too high (above tree base area), reset to bottom
+                this.cycle += 0.05; 
                 if(this.y < height - 300) { 
                     this.reset();
                 }
-                
-                // Wrap horizontal
                 if(this.x < -50) this.x = width + 50;
                 if(this.x > width + 50) this.x = -50;
             }
             draw(ctx) {
                 const alpha = 0.2 + 0.6 * Math.sin(this.cycle);
                 ctx.globalAlpha = Math.max(0, alpha);
-                ctx.fillStyle = '#ffeb3b'; // Gold
-                // Soft glow for fireflies
+                ctx.fillStyle = '#ffeb3b'; 
                 ctx.shadowBlur = 15;
                 ctx.shadowColor = '#ffeb3b';
                 ctx.beginPath();
@@ -352,14 +444,11 @@
                 const x2d = centerX; 
                 const y2d = centerY - this.y * scale / beatScale; 
                 const twinkle = 0.8 + 0.4 * Math.sin(time * 0.15 + this.twinkleOffset);
-                
                 ctx.globalAlpha = this.opacity;
                 ctx.fillStyle = this.color;
-                
                 const spikes = 5;
                 const outerRadius = this.size * scale * twinkle;
                 const innerRadius = outerRadius / 2;
-                
                 ctx.save();
                 ctx.translate(x2d, y2d);
                 ctx.rotate(time * 0.01);
@@ -535,25 +624,17 @@
                 this.vx = 0; this.vy = 0;
             }
             update() {
-                // Better Blizzard Physics
                 let speedMult = isBlizzard ? 4 : 1; 
-                
-                // Vertical speed
                 this.vy = this.speed * speedMult;
-                
-                // Horizontal wind - more intense in blizzard
                 let windForce = isBlizzard ? (wind * 2 + 8 + Math.sin(time * 0.1) * 2) : (wind + Math.sin(this.drift) * 0.5);
                 this.vx = windForce;
-
                 this.y += this.vy;
                 this.x += this.vx;
                 this.drift += 0.02;
-                
                 if (this.y > height/2 + 200) {
                     this.reset();
-                    // Spawn upwind so it fills screen nicely
                     let spawnOffset = isBlizzard ? -300 : -100;
-                    if (this.vx < 0) spawnOffset = 300; // if wind blowing left
+                    if (this.vx < 0) spawnOffset = 300; 
                     this.x = (Math.random() - 0.5) * width + this.vx * -10; 
                 }
             }
@@ -564,14 +645,11 @@
                 ctx.globalAlpha = 0.6 * scale;
                 ctx.fillStyle = 'white';
                 const s = this.size * scale;
-
                 if (isBlizzard) {
-                    // Draw angled streak based on velocity for authentic storm look
                     ctx.lineWidth = s * 0.8;
                     ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
                     ctx.beginPath();
                     ctx.moveTo(x2d, y2d);
-                    // Trail length proportional to speed
                     ctx.lineTo(x2d - this.vx * scale * 1.5, y2d - this.vy * scale * 1.5);
                     ctx.stroke();
                 } else {
@@ -668,11 +746,11 @@
                 }
                 else if (treeState === 'disassembling') {
                     this.state = 'dissipating';
-                    this.y += this.fallSpeed; 
+                    this.y += this.fallSpeed; // Fall down
                     this.x += Math.sin(this.drift) * 1.0 + wind; 
                     this.z += Math.cos(this.drift) * 1.0;
                     this.drift += 0.05;
-                    this.opacity -= 0.015; 
+                    this.opacity -= 0.015; // Fade out as they fall
                     if (this.opacity < 0) this.opacity = 0;
                 }
             }
@@ -829,6 +907,11 @@
                 e.preventDefault(); e.stopPropagation(); toggleBlizzard();
             }, { passive: false });
 
+            gifBtn.addEventListener('click', startGIFRecording);
+            gifBtn.addEventListener('touchstart', (e) => {
+                e.preventDefault(); e.stopPropagation(); startGIFRecording();
+            }, { passive: false });
+
             instructions.addEventListener('mousedown', (e) => e.stopPropagation());
             instructions.addEventListener('touchstart', (e) => e.stopPropagation());
             instructions.addEventListener('input', () => { userHasEditedText = true; });
@@ -879,6 +962,18 @@
         }
 
         function animate() {
+            // GIF RECORDING LOGIC
+            if (isRecordingGIF && gif) {
+                // Throttle capture to ~10fps (every 6th frame at 60fps)
+                if (time % 6 === 0) { 
+                    gifCtx.fillStyle = '#000';
+                    gifCtx.fillRect(0,0,200,355);
+                    // Draw full canvas scaled down to 200x355
+                    gifCtx.drawImage(canvas, 0, 0, width, height, 0, 0, 200, 355);
+                    gif.addFrame(gifCtx, {copy: true, delay: 100}); // 100ms delay = 10fps
+                }
+            }
+
             time++;
             updateCountdown();
             
@@ -918,7 +1013,6 @@
 
             autoRotate += rotationSpeed;
 
-            // State Logic with Text Handling
             stateTimer++;
             let currentText = instructions.innerText;
             
@@ -934,7 +1028,7 @@
                     if(!userHasEditedText) instructions.innerText = "MERRY CHRISTMAS";
                 }
             } else if (treeState === 'assembled') {
-                if (stateTimer > HOLD_DURATION) {
+                if (stateTimer > holdDuration) {
                     treeState = 'disassembling';
                     stateTimer = 0;
                     instructions.style.opacity = 0;
@@ -942,6 +1036,11 @@
             } else if (treeState === 'disassembling') {
                 let vanishedCount = particles.filter(p => p.opacity <= 0).length;
                 if (vanishedCount > particles.length * 0.95) {
+                    // Check if we are recording and finished a cycle
+                    if (isRecordingGIF) {
+                        finishGIFRecording();
+                    }
+                    
                     treeState = 'assembling';
                     stateTimer = 0;
                     particles.forEach(p => {
@@ -974,10 +1073,10 @@
                 ctx.scale(1, -0.3); 
                 ctx.translate(0, -floorScreenY);
                 particles.forEach((p, index) => {
-                    if (index % 3 === 0) p.draw(ctx, centerX, centerY, autoRotate, 0.4);
+                    if (index % 3 === 0) {
+                        p.draw(ctx, centerX, centerY, autoRotate, 0.4);
+                    }
                 });
-                starTopper.update();
-                starTopper.draw(ctx, centerX, centerY, autoRotate);
                 ctx.restore();
             }
 
@@ -994,7 +1093,6 @@
                 p.draw(ctx, centerX, centerY);
             });
 
-            // Fireflies (New)
             ctx.globalCompositeOperation = 'lighter';
             fireflies.forEach(f => {
                 f.update();
@@ -1010,8 +1108,6 @@
 
             requestAnimationFrame(animate);
         }
-
-        // --- Interaction Handlers ---
 
         function handleInput(x) {
             const xNormal = (x / width) - 0.5;
@@ -1038,7 +1134,7 @@
             uiLayer.classList.toggle('hidden');
         });
         window.addEventListener('touchstart', (e) => {
-            if (e.target.id === 'theme-btn' || e.target.id === 'music-btn' || e.target.id === 'blizzard-btn') return;
+            if (e.target.id === 'theme-btn' || e.target.id === 'music-btn' || e.target.id === 'blizzard-btn' || e.target.id === 'gif-btn') return;
             handleDoubleTap();
             if (e.touches.length > 0) {
                 handleTapOrClick(e.touches[0].clientX, e.touches[0].clientY);
