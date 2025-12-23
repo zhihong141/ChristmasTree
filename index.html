@@ -850,11 +850,35 @@
         function updateCountdown() {
             const now = new Date();
             const currentYear = now.getFullYear();
+            
+            // Check if today is Christmas Day (Month is 0-indexed, 11 = Dec)
+            if (now.getMonth() === 11 && now.getDate() === 25) {
+                timerVal.innerText = "IT'S CHRISTMAS!";
+                timerVal.style.color = "#ffd700"; // Gold color for celebration
+                timerVal.style.textShadow = "0 0 10px #ff0000"; // Red glow
+                return; // Stop here, don't show numbers
+            } else {
+                // Reset styles if it's not Christmas
+                timerVal.style.color = "rgba(255, 255, 255, 0.8)";
+                timerVal.style.textShadow = "0 0 5px rgba(255,255,255,0.5)";
+            }
+
             let xmas = new Date(currentYear, 11, 25);
-            if (now.getTime() > xmas.getTime()) {
+            
+            // If we are past Christmas (Dec 26 onwards), target next year
+            if (now.getTime() > xmas.getTime() + (1000 * 60 * 60 * 24)) {
                 xmas = new Date(currentYear + 1, 11, 25);
             }
+            
+            // Note: If we are BEFORE Dec 25, target is this year.
+            // If we are ON Dec 25, the 'if' block at the top handles it.
+
             const diff = xmas - now;
+            
+            // If diff is negative (which technically happens on Dec 25 before we jump to next year),
+            // the top check covers it. But just in case of edge seconds:
+            if (diff < 0) return; 
+
             const days = Math.floor(diff / (1000 * 60 * 60 * 24));
             const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
             const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
@@ -998,7 +1022,12 @@
                 star.draw(ctx);
             });
 
-            if (treeState === 'assembled' && Math.random() < 0.02) {
+            // Logic: High firework chance if it IS Christmas day
+            const now = new Date();
+            const isChristmasDay = (now.getMonth() === 11 && now.getDate() === 25);
+            const fireworkChance = isChristmasDay ? 0.05 : 0.02; // More fireworks on Christmas!
+
+            if (treeState === 'assembled' && Math.random() < fireworkChance) {
                 fireworks.push(new Firework());
             }
             for (let i = fireworks.length - 1; i >= 0; i--) {
