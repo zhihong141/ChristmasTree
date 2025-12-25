@@ -188,6 +188,7 @@
         let particles = [];
         let snowParticles = [];
         let fireflies = [];
+        let greetingParticles = []; 
         let shootingStars = [];
         let sparklers = [];
         let fireworks = []; 
@@ -210,8 +211,8 @@
         let stateTimer = 0;
         let holdDuration = 480; 
 
-        const PARTICLE_COUNT = 1200; 
-        const GIFT_PARTICLE_COUNT = 200; 
+        const PARTICLE_COUNT = 2200; 
+        const GIFT_PARTICLE_COUNT = 300; 
         const TREE_HEIGHT = 500;
         const TREE_WIDTH = 250;
         const FOCAL_LENGTH = 800;
@@ -241,7 +242,7 @@
         ];
         let currentThemeIndex = 0;
 
-        // --- GIF SYSTEM (OPTIMIZED LOW RES) ---
+        // --- GIF SYSTEM ---
         let gif = null;
         let isRecordingGIF = false;
         let gifWorkerBlobURL = null;
@@ -284,6 +285,12 @@
                 p.resetProperties(); 
                 p.y = height + 300;
                 p.state = 'idle';
+            });
+            
+            // Force reset greeting particles too
+            greetingParticles.forEach(p => {
+                p.reset();
+                p.y = height + 300;
             });
             
             setTimeout(() => {
@@ -380,6 +387,82 @@
         };
 
         // --- CLASSES ---
+
+        class GreetingParticle {
+            constructor(targetX, targetY) {
+                this.targetX = targetX;
+                this.targetY = targetY;
+                this.reset();
+            }
+            
+            reset() {
+                // Similar to main Particle start
+                this.x = Math.random() * width;
+                this.y = height + Math.random() * 200; 
+                this.size = Math.random() * 2.5 + 1.5; // Larger for visibility
+                this.opacity = 1;
+                this.state = 'idle';
+                this.speed = 3 + Math.random() * 2;
+                this.drift = Math.random() * Math.PI * 2;
+                this.twinkleOffset = Math.random() * 100;
+            }
+
+            update() {
+                // Sync with global treeState
+                if (treeState === 'assembling') {
+                    if (this.state !== 'formed') {
+                        const distY = this.y - this.targetY;
+                        let currentSpeed = this.speed;
+                        
+                        // Brake logic
+                        if (distY < 100 && distY > 0) {
+                             currentSpeed = Math.max(0.5, currentSpeed * (distY / 100));
+                        }
+                        
+                        this.y -= currentSpeed;
+                        this.x += (this.targetX - this.x) * 0.1; // Lerp to text position
+                        
+                        if (Math.abs(distY) <= 2 && Math.abs(this.x - this.targetX) < 2) {
+                            this.state = 'formed';
+                            this.y = this.targetY;
+                            this.x = this.targetX;
+                        }
+                    } else {
+                        // Gentle sway when formed - FIXED TO BE STABLE
+                        this.x = this.targetX + Math.sin(time * 0.03 + this.targetY) * 1.5;
+                        this.y = this.targetY + Math.cos(time * 0.02 + this.targetX) * 1.5;
+                    }
+                } 
+                else if (treeState === 'disassembling') {
+                    // Dissipate downwards (fall) - FIXED DIRECTION
+                    this.state = 'dissipating';
+                    this.y += 2 + Math.random() * 2; 
+                    this.x += Math.sin(this.drift + time * 0.05);
+                    this.opacity -= 0.02;
+                    if(this.opacity < 0) this.opacity = 0;
+                }
+            }
+            
+            draw(ctx) {
+                if (this.opacity <= 0.01) return;
+                
+                const alpha = this.opacity * (0.5 + 0.5 * Math.sin(time * 0.1 + this.twinkleOffset));
+                
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = '#FFD700'; // Pure Gold
+                
+                // Add pop/glow
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = 'rgba(255, 215, 0, 0.5)';
+                
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.shadowBlur = 0;
+                ctx.globalAlpha = 1;
+            }
+        }
 
         class Firefly {
             constructor() {
@@ -772,7 +855,7 @@
                     this.x += Math.sin(this.drift) * 1.0 + wind; 
                     this.z += Math.cos(this.drift) * 1.0;
                     this.drift += 0.05;
-                    this.opacity -= 0.015; 
+                    this.opacity -= 0.015; // Fade out as they fall
                     if (this.opacity < 0) this.opacity = 0;
                 }
             }
@@ -798,8 +881,6 @@
                 let twinkle = 1;
                 if (this.type === 'ornament' || this.type === 'star') {
                     twinkle = 0.8 + 0.4 * Math.sin(time * 0.1 + this.twinkleOffset);
-                    
-                    // EXTRA CHRISTMAS SPARKLE
                     if (isChristmasToday) twinkle *= 1.5;
                 }
 
@@ -872,11 +953,42 @@
             ctx.restore();
         }
 
+        function createGreetingParticles() {
+            if (!width || !height) return; 
+            const tmpCanvas = document.createElement('canvas');
+            const tCtx = tmpCanvas.getContext('2d');
+            tmpCanvas.width = width;
+            tmpCanvas.height = height;
+            
+            const fontSize = Math.min(80, width / 10);
+            tCtx.font = `bold ${fontSize}px "Cinzel", serif`;
+            tCtx.fillStyle = 'white';
+            tCtx.textAlign = 'center';
+            tCtx.textBaseline = 'middle';
+            
+            tCtx.fillText('MERRY', width / 2, height * 0.2);
+            tCtx.fillText('CHRISTMAS', width / 2, height * 0.35);
+
+            const idata = tCtx.getImageData(0, 0, width, height);
+            const data = idata.data;
+            
+            greetingParticles = [];
+            const step = 6; 
+            
+            for (let y = 0; y < height; y += step) {
+                for (let x = 0; x < width; x += step) {
+                    if (data[(y * width + x) * 4 + 3] > 128) {
+                        // Pass target x and y
+                        greetingParticles.push(new GreetingParticle(x, y));
+                    }
+                }
+            }
+        }
+
         function updateCountdown() {
             const now = new Date();
             const currentYear = now.getFullYear();
             
-            // Christmas Day Logic
             if (now.getMonth() === 11 && now.getDate() === 25) {
                 timerVal.innerText = "IT'S CHRISTMAS!";
                 timerVal.style.color = "#ffd700"; 
@@ -891,7 +1003,6 @@
             if (now.getTime() > xmas.getTime() + (1000 * 60 * 60 * 24)) {
                 xmas = new Date(currentYear + 1, 11, 25);
             }
-            
             const diff = xmas - now;
             if (diff < 0) return; 
 
@@ -933,7 +1044,6 @@
         }
 
         function init() {
-            // Check Date for Christmas Mode
             const now = new Date();
             isChristmasToday = (now.getMonth() === 11 && now.getDate() === 25);
 
@@ -968,9 +1078,9 @@
             instructions.addEventListener('touchstart', (e) => e.stopPropagation());
             instructions.addEventListener('input', () => { userHasEditedText = true; });
 
-            // On Christmas, ensure denser snow on init
             if(isChristmasToday) {
-                for (let i = 0; i < 200; i++) snowParticles.push(new SnowParticle());
+                for (let i = 0; i < 120; i++) snowParticles.push(new SnowParticle());
+                createGreetingParticles();
             }
 
             animate();
@@ -1016,6 +1126,8 @@
             canvas.width = width;
             canvas.height = height;
             treeScale = Math.min(1, Math.max(0.5, width / 350), Math.max(0.5, height / 650));
+            
+            if(isChristmasToday) createGreetingParticles();
         }
 
         function animate() {
@@ -1047,14 +1159,23 @@
             ctx.fillRect(0, 0, width, height);
 
             drawAurora(ctx, width, height, time);
+            
+            // Update Greeting Particles with correct behavior
+            if (isChristmasToday && greetingParticles.length > 0) {
+                ctx.globalCompositeOperation = 'lighter';
+                greetingParticles.forEach(gp => {
+                    gp.update();
+                    gp.draw(ctx);
+                });
+            }
 
             shootingStars.forEach(star => {
                 star.update();
                 star.draw(ctx);
             });
 
-            // Auto-Fireworks Logic: High firework chance if it IS Christmas day
             const fireworkChance = isChristmasToday ? 0.05 : 0.02; 
+
             if (treeState === 'assembled' && Math.random() < fireworkChance) {
                 fireworks.push(new Firework());
             }
@@ -1086,7 +1207,6 @@
                         instructions.innerText = isChristmasToday ? "IT'S CHRISTMAS DAY!" : "MERRY CHRISTMAS";
                         if(isChristmasToday) instructions.style.color = "#ffd700";
                     }
-                    // GRAND FINALE trigger
                     if (isChristmasToday) launchGrandFinale();
                 }
             } else if (treeState === 'assembled') {
@@ -1098,7 +1218,6 @@
             } else if (treeState === 'disassembling') {
                 let vanishedCount = particles.filter(p => p.opacity <= 0).length;
                 if (vanishedCount > particles.length * 0.95) {
-                    // Check if we are recording and finished a cycle
                     if (isRecordingGIF) {
                         finishGIFRecording();
                     }
@@ -1112,6 +1231,11 @@
                         p.z = (Math.random() - 0.5) * 500;
                         p.state = 'idle';
                     });
+                    
+                    // Reset Greeting Particles too
+                    if(isChristmasToday && greetingParticles.length > 0) {
+                         greetingParticles.forEach(gp => gp.reset());
+                    }
                 }
             }
             lastTreeState = treeState;
@@ -1136,11 +1260,11 @@
                 ctx.translate(0, -floorScreenY);
                 particles.forEach((p, index) => {
                     if (index % 3 === 0) {
+                        // Increase opacity for reflection
                         p.draw(ctx, centerX, centerY, autoRotate, 0.4);
                     }
                 });
-                starTopper.update();
-                starTopper.draw(ctx, centerX, centerY, autoRotate);
+                // No star reflection as requested
                 ctx.restore();
             }
 
@@ -1157,6 +1281,7 @@
                 p.draw(ctx, centerX, centerY);
             });
 
+            // Fireflies (New)
             ctx.globalCompositeOperation = 'lighter';
             fireflies.forEach(f => {
                 f.update();
@@ -1172,6 +1297,8 @@
 
             requestAnimationFrame(animate);
         }
+
+        // --- Interaction Handlers ---
 
         function handleInput(x) {
             const xNormal = (x / width) - 0.5;
