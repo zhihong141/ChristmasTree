@@ -201,6 +201,7 @@
         let targetWind = 0;
         let isBlizzard = false;
         let userHasEditedText = false;
+        let isChristmasToday = false; 
 
         let time = 0; 
         
@@ -246,10 +247,9 @@
         let gifWorkerBlobURL = null;
         let gifCanvas = document.createElement('canvas'); 
         let gifCtx = gifCanvas.getContext('2d');
-        const GIF_WIDTH = 200;  // Low resolution for speed & success
+        const GIF_WIDTH = 200;  
         const GIF_HEIGHT = 355; 
 
-        // Preload GIF worker code
         fetch('https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js')
             .then(r => r.text())
             .then(code => {
@@ -265,13 +265,11 @@
             gifBtn.innerText = "Rec...";
             gifBtn.classList.add('processing');
             
-            // Shorten hold duration for GIF to make it concise (2.5 seconds)
             holdDuration = 150; 
 
-            // Initialize GIF encoder
             gif = new GIF({
                 workers: 2,
-                quality: 30, // Lower quality for speed
+                quality: 30, 
                 workerScript: gifWorkerBlobURL,
                 width: GIF_WIDTH, 
                 height: GIF_HEIGHT
@@ -279,18 +277,15 @@
             gifCanvas.width = GIF_WIDTH;
             gifCanvas.height = GIF_HEIGHT;
 
-            // Reset animation to start
             treeState = 'disassembling';
             stateTimer = 0;
             
-            // Force reset particles immediately off screen
             particles.forEach(p => {
                 p.resetProperties(); 
                 p.y = height + 300;
                 p.state = 'idle';
             });
             
-            // Wait a moment then start assembly
             setTimeout(() => {
                 treeState = 'assembling';
                 stateTimer = 0;
@@ -314,7 +309,7 @@
                     window.URL.revokeObjectURL(url);
                     gifBtn.innerText = "Save GIF";
                     gifBtn.classList.remove('processing');
-                    holdDuration = 480; // Restore original duration
+                    holdDuration = 480; 
                 }, 100);
             });
 
@@ -444,11 +439,17 @@
                 const x2d = centerX; 
                 const y2d = centerY - this.y * scale / beatScale; 
                 const twinkle = 0.8 + 0.4 * Math.sin(time * 0.15 + this.twinkleOffset);
+                
+                // Extra glow on Christmas Day
+                const extraGlow = isChristmasToday ? 1.5 : 1.0;
+
                 ctx.globalAlpha = this.opacity;
                 ctx.fillStyle = this.color;
+                
                 const spikes = 5;
-                const outerRadius = this.size * scale * twinkle;
+                const outerRadius = this.size * scale * twinkle * extraGlow;
                 const innerRadius = outerRadius / 2;
+                
                 ctx.save();
                 ctx.translate(x2d, y2d);
                 ctx.rotate(time * 0.01);
@@ -460,7 +461,7 @@
                 }
                 ctx.closePath();
                 ctx.shadowBlur = 40 * scale;
-                ctx.shadowColor = "rgba(255, 255, 200, 0.9)";
+                ctx.shadowColor = isChristmasToday ? "rgba(255, 215, 0, 0.9)" : "rgba(255, 255, 200, 0.9)";
                 ctx.fill();
                 ctx.fillStyle = '#ffffff';
                 ctx.shadowBlur = 10 * scale;
@@ -548,8 +549,15 @@
                 this.vy = Math.sin(angle) * speed;
                 this.life = 1;
                 this.decay = Math.random() * 0.03 + 0.01;
-                const colors = ['#ffd700', '#ffffff', '#ff4444'];
-                this.color = colors[Math.floor(Math.random() * colors.length)];
+                
+                // CHRISTMAS EXCLUSIVE: Candy Cane Sparklers
+                if (isChristmasToday) {
+                    this.color = Math.random() < 0.5 ? '#ff0000' : '#ffffff';
+                } else {
+                    const colors = ['#ffd700', '#ffffff', '#ff4444'];
+                    this.color = colors[Math.floor(Math.random() * colors.length)];
+                }
+                
                 this.gravity = 0.15;
             }
             update() {
@@ -622,6 +630,9 @@
                 this.speed = Math.random() * 2 + 1;
                 this.drift = Math.random() * Math.PI * 2;
                 this.vx = 0; this.vy = 0;
+                
+                // CHRISTMAS MAGIC: 30% chance to be gold on Dec 25
+                this.isGold = isChristmasToday && Math.random() < 0.3;
             }
             update() {
                 let speedMult = isBlizzard ? 4 : 1; 
@@ -643,11 +654,20 @@
                 const x2d = centerX + this.x * scale;
                 const y2d = centerY + this.y * scale;
                 ctx.globalAlpha = 0.6 * scale;
-                ctx.fillStyle = 'white';
+                
+                // Gold or White snow
+                ctx.fillStyle = this.isGold ? '#ffd700' : 'white';
+                
+                // Add soft glow to golden snow
+                if (this.isGold) {
+                    ctx.shadowBlur = 5;
+                    ctx.shadowColor = '#ffd700';
+                }
+
                 const s = this.size * scale;
                 if (isBlizzard) {
                     ctx.lineWidth = s * 0.8;
-                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+                    ctx.strokeStyle = this.isGold ? 'rgba(255, 215, 0, 0.7)' : 'rgba(255, 255, 255, 0.7)';
                     ctx.beginPath();
                     ctx.moveTo(x2d, y2d);
                     ctx.lineTo(x2d - this.vx * scale * 1.5, y2d - this.vy * scale * 1.5);
@@ -655,6 +675,8 @@
                 } else {
                     ctx.fillRect(x2d, y2d, s, s);
                 }
+                
+                ctx.shadowBlur = 0; // Reset
                 ctx.globalAlpha = 1;
             }
         }
@@ -746,11 +768,11 @@
                 }
                 else if (treeState === 'disassembling') {
                     this.state = 'dissipating';
-                    this.y += this.fallSpeed; // Fall down
+                    this.y += this.fallSpeed; 
                     this.x += Math.sin(this.drift) * 1.0 + wind; 
                     this.z += Math.cos(this.drift) * 1.0;
                     this.drift += 0.05;
-                    this.opacity -= 0.015; // Fade out as they fall
+                    this.opacity -= 0.015; 
                     if (this.opacity < 0) this.opacity = 0;
                 }
             }
@@ -776,6 +798,9 @@
                 let twinkle = 1;
                 if (this.type === 'ornament' || this.type === 'star') {
                     twinkle = 0.8 + 0.4 * Math.sin(time * 0.1 + this.twinkleOffset);
+                    
+                    // EXTRA CHRISTMAS SPARKLE
+                    if (isChristmasToday) twinkle *= 1.5;
                 }
 
                 const alpha = Math.min(1, scale * 0.9) * this.opacity * alphaMult;
@@ -851,32 +876,23 @@
             const now = new Date();
             const currentYear = now.getFullYear();
             
-            // Check if today is Christmas Day (Month is 0-indexed, 11 = Dec)
+            // Christmas Day Logic
             if (now.getMonth() === 11 && now.getDate() === 25) {
                 timerVal.innerText = "IT'S CHRISTMAS!";
-                timerVal.style.color = "#ffd700"; // Gold color for celebration
-                timerVal.style.textShadow = "0 0 10px #ff0000"; // Red glow
-                return; // Stop here, don't show numbers
+                timerVal.style.color = "#ffd700"; 
+                timerVal.style.textShadow = "0 0 10px #ff0000"; 
+                return; 
             } else {
-                // Reset styles if it's not Christmas
                 timerVal.style.color = "rgba(255, 255, 255, 0.8)";
                 timerVal.style.textShadow = "0 0 5px rgba(255,255,255,0.5)";
             }
 
             let xmas = new Date(currentYear, 11, 25);
-            
-            // If we are past Christmas (Dec 26 onwards), target next year
             if (now.getTime() > xmas.getTime() + (1000 * 60 * 60 * 24)) {
                 xmas = new Date(currentYear + 1, 11, 25);
             }
             
-            // Note: If we are BEFORE Dec 25, target is this year.
-            // If we are ON Dec 25, the 'if' block at the top handles it.
-
             const diff = xmas - now;
-            
-            // If diff is negative (which technically happens on Dec 25 before we jump to next year),
-            // the top check covers it. But just in case of edge seconds:
             if (diff < 0) return; 
 
             const days = Math.floor(diff / (1000 * 60 * 60 * 24));
@@ -899,6 +915,14 @@
             blizzardBtn.classList.toggle('active');
         }
 
+        function launchGrandFinale() {
+            for(let i=0; i<5; i++) {
+                setTimeout(() => {
+                    fireworks.push(new Firework(width*0.2 + Math.random()*width*0.6, height, false));
+                }, i * 200);
+            }
+        }
+
         let lastTapTime = 0;
         function handleDoubleTap() {
             const now = new Date().getTime();
@@ -909,6 +933,10 @@
         }
 
         function init() {
+            // Check Date for Christmas Mode
+            const now = new Date();
+            isChristmasToday = (now.getMonth() === 11 && now.getDate() === 25);
+
             resize();
             createParticles();
             createSnow();
@@ -939,6 +967,11 @@
             instructions.addEventListener('mousedown', (e) => e.stopPropagation());
             instructions.addEventListener('touchstart', (e) => e.stopPropagation());
             instructions.addEventListener('input', () => { userHasEditedText = true; });
+
+            // On Christmas, ensure denser snow on init
+            if(isChristmasToday) {
+                for (let i = 0; i < 200; i++) snowParticles.push(new SnowParticle());
+            }
 
             animate();
         }
@@ -988,13 +1021,11 @@
         function animate() {
             // GIF RECORDING LOGIC
             if (isRecordingGIF && gif) {
-                // Throttle capture to ~10fps (every 6th frame at 60fps)
                 if (time % 6 === 0) { 
                     gifCtx.fillStyle = '#000';
                     gifCtx.fillRect(0,0,200,355);
-                    // Draw full canvas scaled down to 200x355
                     gifCtx.drawImage(canvas, 0, 0, width, height, 0, 0, 200, 355);
-                    gif.addFrame(gifCtx, {copy: true, delay: 100}); // 100ms delay = 10fps
+                    gif.addFrame(gifCtx, {copy: true, delay: 100}); 
                 }
             }
 
@@ -1022,11 +1053,8 @@
                 star.draw(ctx);
             });
 
-            // Logic: High firework chance if it IS Christmas day
-            const now = new Date();
-            const isChristmasDay = (now.getMonth() === 11 && now.getDate() === 25);
-            const fireworkChance = isChristmasDay ? 0.05 : 0.02; // More fireworks on Christmas!
-
+            // Auto-Fireworks Logic: High firework chance if it IS Christmas day
+            const fireworkChance = isChristmasToday ? 0.05 : 0.02; 
             if (treeState === 'assembled' && Math.random() < fireworkChance) {
                 fireworks.push(new Firework());
             }
@@ -1043,18 +1071,23 @@
             autoRotate += rotationSpeed;
 
             stateTimer++;
-            let currentText = instructions.innerText;
             
             if (treeState === 'assembling') {
                 if(!userHasEditedText && lastTreeState !== 'assembling') {
                     instructions.innerText = "The magic is rising...";
+                    instructions.style.color = "rgba(255,255,255,0.8)";
                 }
                 instructions.style.opacity = 1;
                 let formedCount = particles.filter(p => p.state === 'formed').length;
                 if (formedCount > particles.length * 0.95) {
                     treeState = 'assembled';
                     stateTimer = 0;
-                    if(!userHasEditedText) instructions.innerText = "MERRY CHRISTMAS";
+                    if(!userHasEditedText) {
+                        instructions.innerText = isChristmasToday ? "IT'S CHRISTMAS DAY!" : "MERRY CHRISTMAS";
+                        if(isChristmasToday) instructions.style.color = "#ffd700";
+                    }
+                    // GRAND FINALE trigger
+                    if (isChristmasToday) launchGrandFinale();
                 }
             } else if (treeState === 'assembled') {
                 if (stateTimer > holdDuration) {
@@ -1106,6 +1139,8 @@
                         p.draw(ctx, centerX, centerY, autoRotate, 0.4);
                     }
                 });
+                starTopper.update();
+                starTopper.draw(ctx, centerX, centerY, autoRotate);
                 ctx.restore();
             }
 
