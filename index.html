@@ -211,8 +211,8 @@
         let stateTimer = 0;
         let holdDuration = 480; 
 
-        const PARTICLE_COUNT = 2200; 
-        const GIFT_PARTICLE_COUNT = 300; 
+        const PARTICLE_COUNT = 1500; 
+        const GIFT_PARTICLE_COUNT = 250; 
         const TREE_HEIGHT = 500;
         const TREE_WIDTH = 250;
         const FOCAL_LENGTH = 800;
@@ -293,6 +293,9 @@
                 p.y = height + 300;
             });
             
+            // Reset Star Topper
+            if (starTopper) starTopper.reset();
+
             setTimeout(() => {
                 treeState = 'assembling';
                 stateTimer = 0;
@@ -451,15 +454,11 @@
                 ctx.globalAlpha = alpha;
                 ctx.fillStyle = '#FFD700'; // Pure Gold
                 
-                // Add pop/glow
-                ctx.shadowBlur = 10;
-                ctx.shadowColor = 'rgba(255, 215, 0, 0.5)';
-                
+                // PERFORMANCE: Removed shadowBlur
                 ctx.beginPath();
                 ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
                 ctx.fill();
                 
-                ctx.shadowBlur = 0;
                 ctx.globalAlpha = 1;
             }
         }
@@ -500,12 +499,10 @@
                 const alpha = 0.3 + 0.7 * Math.sin(this.cycle);
                 ctx.globalAlpha = Math.max(0, alpha);
                 ctx.fillStyle = '#ffeb3b'; 
-                ctx.shadowBlur = 10;
-                ctx.shadowColor = '#ffeb3b';
+                // PERFORMANCE: Removed shadowBlur
                 ctx.beginPath();
                 ctx.arc(this.x, this.y, 2, 0, Math.PI*2);
                 ctx.fill();
-                ctx.shadowBlur = 0;
                 ctx.globalAlpha = 1;
             }
         }
@@ -513,49 +510,99 @@
         class StarTopper {
             constructor() { this.reset(); }
             reset() {
-                this.x = 0; this.y = TREE_HEIGHT / 2; this.z = 0;
-                this.size = 12; this.opacity = 0; this.color = '#fffbe3'; 
+                this.x = 0; 
+                this.y = 0; // Starts below visible top, will rise
+                this.targetY = TREE_HEIGHT / 2;
+                this.z = 0;
+                this.size = 12; 
+                this.opacity = 0; 
+                this.color = '#fffbe3'; 
                 this.twinkleOffset = Math.random() * 100;
+                this.trail = [];
             }
             update() {
-                if (treeState === 'assembling' || treeState === 'assembled') {
-                    if (this.opacity < 1) this.opacity += 0.01;
+                if (treeState === 'assembling') {
+                     if (this.opacity < 1) this.opacity += 0.01;
+                     if (this.y < this.targetY) this.y += 2; // Rise
+                } else if (treeState === 'assembled') {
+                     this.opacity = 1;
+                     this.y = this.targetY;
                 } else if (treeState === 'disassembling') {
-                    if (this.opacity > 0) this.opacity -= 0.04;
+                     if (this.opacity > 0) this.opacity -= 0.04;
+                     this.y -= 2; // Fall
                 }
+                
+                // Trail Logic
+                this.trail.push({x: this.x, y: this.y, z: this.z, opacity: this.opacity});
+                if (this.trail.length > 20) this.trail.shift();
             }
             draw(ctx, centerX, centerY, globalRotation) {
-                if (this.opacity <= 0.01) return;
+                if (this.opacity <= 0.01 && this.trail.length === 0) return;
+
                 const beatScale = 1 + beatIntensity * 0.15;
                 const scale = (FOCAL_LENGTH / (FOCAL_LENGTH + 0)) * treeScale * beatScale;
                 const x2d = centerX; 
-                const y2d = centerY - this.y * scale / beatScale; 
-                const twinkle = 0.8 + 0.4 * Math.sin(time * 0.15 + this.twinkleOffset);
                 
-                ctx.globalAlpha = this.opacity;
-                ctx.fillStyle = this.color;
-                
-                const spikes = 5;
-                const outerRadius = this.size * scale * twinkle * (isChristmasToday ? 1.5 : 1.0);
-                const innerRadius = outerRadius / 2;
-                
+                // Draw Trail - Softer and Glowing
                 ctx.save();
-                ctx.translate(x2d, y2d);
-                ctx.rotate(time * 0.01);
-                ctx.beginPath();
-                for (let i = 0; i < spikes * 2; i++) {
-                    const r = (i % 2 === 0) ? outerRadius : innerRadius;
-                    const a = (Math.PI / spikes) * i;
-                    ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+                for (let i = 0; i < this.trail.length; i++) {
+                    const point = this.trail[i];
+                    const trailRatio = i / this.trail.length; // 0 to 1 (1 is head)
+                    const tScale = (FOCAL_LENGTH / (FOCAL_LENGTH + point.z)) * treeScale * beatScale;
+                    const ty2d = centerY - point.y * tScale / beatScale;
+                    
+                    // Fade tail out
+                    const tAlpha = point.opacity * trailRatio * 0.4;
+                    const tSize = this.size * tScale * trailRatio * 0.6;
+                    
+                    ctx.globalAlpha = tAlpha;
+                    ctx.fillStyle = this.color;
+                    
+                    ctx.shadowBlur = 15 * tScale;
+                    ctx.shadowColor = this.color;
+                    
+                    ctx.beginPath();
+                    ctx.arc(centerX, ty2d, tSize, 0, Math.PI * 2);
+                    ctx.fill();
                 }
-                ctx.closePath();
-                ctx.shadowBlur = 40 * scale;
-                ctx.shadowColor = isChristmasToday ? "rgba(255, 215, 0, 0.9)" : "rgba(255, 255, 200, 0.9)";
-                ctx.fill();
-                ctx.fillStyle = '#ffffff';
-                ctx.shadowBlur = 10 * scale;
-                ctx.fill();
                 ctx.restore();
+
+                // Draw Main Sphere - Soft Edge and Glow
+                if (this.opacity > 0.01) {
+                    const y2d = centerY - this.y * scale / beatScale; 
+                    const twinkle = 0.8 + 0.4 * Math.sin(time * 0.15 + this.twinkleOffset);
+                    const radius = this.size * scale * twinkle;
+
+                    ctx.globalAlpha = this.opacity;
+                    
+                    ctx.save();
+                    ctx.translate(x2d, y2d);
+                    
+                    // 1. Strong Outer Glow
+                    ctx.shadowBlur = 50 * scale;
+                    ctx.shadowColor = isChristmasToday ? "rgba(255, 215, 0, 0.8)" : "rgba(255, 255, 220, 0.8)";
+                    
+                    // 2. Soft Sphere using Radial Gradient
+                    const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
+                    gradient.addColorStop(0, "rgba(255, 255, 255, 1)");   // Bright center
+                    gradient.addColorStop(0.5, "rgba(255, 255, 230, 0.5)"); // Mid tone
+                    gradient.addColorStop(1, "rgba(255, 255, 255, 0)");   // Transparent edge
+                    
+                    ctx.fillStyle = gradient;
+                    ctx.beginPath();
+                    // Draw slightly larger than radius to accommodate soft edge
+                    ctx.arc(0, 0, radius * 1.2, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // 3. Inner solid core for definition
+                    ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+                    ctx.shadowBlur = 10 * scale;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, radius * 0.4, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    ctx.restore();
+                }
                 ctx.globalAlpha = 1;
             }
         }
@@ -905,10 +952,8 @@
                 if (this.type === 'star') {
                     ctx.beginPath();
                     ctx.arc(x2d, y2d, Math.max(0.1, currentSize), 0, Math.PI * 2);
-                    ctx.shadowBlur = 30 * scale * twinkle;
-                    ctx.shadowColor = `rgba(255, 255, 255, ${0.9 * this.opacity * alphaMult})`;
+                    // PERFORMANCE: Removed shadowBlur
                     ctx.fill();
-                    ctx.shadowBlur = 0; 
                 } 
                 else if (this.type === 'ornament') {
                     ctx.beginPath();
@@ -1228,6 +1273,8 @@
                     if(isChristmasToday && greetingParticles.length > 0) {
                          greetingParticles.forEach(gp => gp.reset());
                     }
+                    // Reset Star Topper
+                    if (starTopper) starTopper.reset();
                 }
             }
             lastTreeState = treeState;
@@ -1252,9 +1299,15 @@
                 ctx.translate(0, -floorScreenY);
                 particles.forEach((p, index) => {
                     if (index % 3 === 0) {
+                        // Increase opacity for reflection
                         p.draw(ctx, centerX, centerY, autoRotate, 0.4);
                     }
                 });
+                
+                // Draw reflection of Star Topper (using autoRotate)
+                starTopper.update();
+                starTopper.draw(ctx, centerX, centerY, autoRotate);
+
                 ctx.restore();
             }
 
@@ -1263,6 +1316,7 @@
                 p.draw(ctx, centerX, centerY, autoRotate);
             });
             
+            // Draw Main Star Topper
             starTopper.draw(ctx, centerX, centerY, autoRotate);
 
             ctx.globalCompositeOperation = 'source-over'; 
@@ -1271,6 +1325,7 @@
                 p.draw(ctx, centerX, centerY);
             });
 
+            // Fireflies (New)
             ctx.globalCompositeOperation = 'lighter';
             fireflies.forEach(f => {
                 f.update();
@@ -1286,6 +1341,8 @@
 
             requestAnimationFrame(animate);
         }
+
+        // --- Interaction Handlers ---
 
         function handleInput(x) {
             const xNormal = (x / width) - 0.5;
